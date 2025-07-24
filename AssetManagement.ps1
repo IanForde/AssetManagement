@@ -1,55 +1,63 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# ================== CONFIGURATION ======================
-# Your GitHub info:
-$repoUser = 'IanForde'           # Your GitHub username
-$repoName = 'AssetManagement'    # Your repository name
-$branch   = 'main'               # Adjust if your default branch is not main
+# =============== CONFIGURATION ===============
+# Local Git repository path (clone your repo here manually first)
+$localRepoPath = "C:\AssetManagement"
+$localCsvPath = Join-Path -Path $localRepoPath -ChildPath "AssetList.csv"
 
-$rawCsvUrl = "https://raw.githubusercontent.com/$repoUser/$repoName/$branch/AssetList.csv"
+# Git branch to push to
+$gitBranch = 'main'
+# =============================================
 
-# Local cache for editing and saving assets
-$localCsvPath = "$env:TEMP\AssetList_Local.csv"
-# =======================================================
+function Run-GitCommand {
+    param (
+        [string]$Arguments
+    )
+    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processInfo.FileName = "git"
+    $processInfo.Arguments = $Arguments
+    $processInfo.WorkingDirectory = $localRepoPath
+    $processInfo.RedirectStandardOutput = $true
+    $processInfo.RedirectStandardError = $true
+    $processInfo.UseShellExecute = $false
+    $processInfo.CreateNoWindow = $true
 
-# Download live CSV from GitHub at startup, update local copy
-function Sync-FromGitHub {
-    try {
-        Invoke-WebRequest -Uri $rawCsvUrl -OutFile $localCsvPath -UseBasicParsing -ErrorAction Stop
-        return $true
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Couldn't fetch the CSV from GitHub. The system will use the last local copy if available.",
-            "Warning", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
-        return $false
-    }
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $processInfo
+    $process.Start() | Out-Null
+    $output = $process.StandardOutput.ReadToEnd()
+    $errorOutput = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    return @{ ExitCode = $process.ExitCode; StdOut = $output; StdErr = $errorOutput }
 }
 
-# Read assets from the local cached CSV and force as array
-function Load-Assets {
-    if (-Not (Test-Path $localCsvPath)) {
-        # Create headers if file doesn't exist
-        "Asset Tag,Model,Serial Number,Assigned To,Description" | Out-File -FilePath $localCsvPath -Encoding UTF8
-    }
-    $assets = Import-Csv -Path $localCsvPath
-    if ($null -eq $assets) {
-        return @()
-    }
-    # Force $assets to be always an array
-    return @($assets)
-}
-
-# Save assets to the local cached CSV
-function Save-Assets($assets) {
+function Commit-And-Push {
     try {
-        $assets | Export-Csv -Path $localCsvPath -NoTypeInformation -Encoding UTF8
-        [System.Windows.Forms.MessageBox]::Show(
-            "Asset data saved locally to '$localCsvPath'. Be aware that this does NOT update the GitHub repo." +
-            "`nYou must push updates to GitHub manually if you want them reflected online.",
-            "Local Save Only", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Error saving asset data locally: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        # Stage the CSV
+        $addResult = Run-GitCommand "add AssetList.csv"
+        if ($addResult.ExitCode -ne 0) {
+            throw "Git add failed: $($addResult.StdErr)"
+        }
+
+        # Commit changes - allow empty commit to avoid errors if no changes
+        $commitMessage = "Update AssetList.csv by script - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        $commitResult = Run-GitCommand "commit -m `"$commitMessage`" --allow-empty"
+        if ($commitResult.ExitCode -ne 0 -and ($commitResult.StdErr -notmatch "nothing to commit")) {
+            throw "Git commit failed: $($commitResult.StdErr)"
+        }
+
+        # Push to remote
+        $pushResult = Run-GitCommand "push origin $gitBranch"
+        if ($pushResult.ExitCode -ne 0) {
+            throw "Git push failed: $($pushResult.StdErr)"
+        }
+
+        [System.Windows.Forms.MessageBox]::Show("Changes pushed successfully to GitHub.","Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Git operation failed:`n$_","Git Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
     }
 }
 
@@ -66,6 +74,24 @@ function New-LabeledTextBox($labelText, $top, $width=250) {
     $textBox.Width = $width
 
     return ,@($label, $textBox)
+}
+
+function Load-Assets {
+    if (-Not (Test-Path $localCsvPath)) {
+        "Asset Tag,Model,Serial Number,Assigned To,Description" | Out-File -FilePath $localCsvPath -Encoding UTF8
+    }
+    $assets = Import-Csv -Path $localCsvPath
+    if ($null -eq $assets) { return @() }
+    return @($assets)
+}
+
+function Save-Assets($assets) {
+    try {
+        $assets | Export-Csv -Path $localCsvPath -NoTypeInformation -Encoding UTF8
+        Commit-And-Push
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Error saving asset data: $_","Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    }
 }
 
 function Show-LookupAssetForm {
@@ -110,18 +136,15 @@ function Show-LookupAssetForm {
             return
         }
         $assets = Load-Assets
-        $match = $assets | Where-Object {
-            $_.'Asset Tag' -like "*$query*" -or $_.'Serial Number' -like "*$query*"
-        }
+        $match = $assets | Where-Object { `
+            $_.'Asset Tag' -like "*$query*" -or $_.'Serial Number' -like "*$query*" }
 
         if ($match.Count -eq 0) {
             [System.Windows.Forms.MessageBox]::Show("No matching asset found.","Not Found", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
         } elseif ($match.Count -eq 1 -or ($match.Count -eq $null -and $match)) {
             $form.Close()
-            # When single object, ensure treated as single asset object
             Show-EditAssetForm -Asset ($match | Select-Object -First 1)
         } else {
-            # Ensure $match is always an array for Show-SelectAssetForm
             if ($match.Count -eq $null -and $match) { $match = @($match) }
             $form.Close()
             Show-SelectAssetForm -Matches $match
@@ -237,12 +260,8 @@ function Show-EditAssetForm {
         }
         $assets = Load-Assets
 
-        # Ensure $assets is always an array before modifying
-        if ($assets -eq $null) {
-            $assets = @()
-        } elseif (-not ($assets -is [System.Collections.IEnumerable])) {
-            $assets = @($assets)
-        }
+        if ($assets -eq $null) { $assets = @() }
+        elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
 
         $updated = $false
         for ($i=0; $i -lt $assets.Count; $i++) {
@@ -309,12 +328,8 @@ function Show-CreateAssetForm {
         }
         $assets = Load-Assets
 
-        # Ensure $assets is always an array before modifying
-        if ($assets -eq $null) {
-            $assets = @()
-        } elseif (-not ($assets -is [System.Collections.IEnumerable])) {
-            $assets = @($assets)
-        }
+        if ($assets -eq $null) { $assets = @() }
+        elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
 
         $existing = $assets | Where-Object {
             $_.'Asset Tag' -eq $controls['Asset Tag'].Text.Trim() -or
@@ -341,7 +356,6 @@ function Show-CreateAssetForm {
 }
 
 function Show-ViewAllAssets {
-    # Open local CSV in Notepad for manual viewing/editing
     if (Test-Path $localCsvPath) {
         Start-Process notepad.exe $localCsvPath
     } else {
@@ -358,9 +372,9 @@ function Show-MainForm {
     $form.MaximizeBox = $false
 
     $notice = New-Object System.Windows.Forms.Label
-    $notice.Text = "Loaded from GitHub - saving only updates your local copy!"
+    $notice.Text = "Using local Git repo - changes auto-pushed to GitHub."
     $notice.AutoSize = $true
-    $notice.ForeColor = "Red"
+    $notice.ForeColor = "DarkGreen"
     $notice.Top = 8
     $notice.Left = 20
     $form.Controls.Add($notice)
@@ -396,7 +410,5 @@ function Show-MainForm {
     $form.ShowDialog() | Out-Null
 }
 
-# ====== APPLICATION STARTUP ======
-
-Sync-FromGitHub | Out-Null
+# ========== START APP =============
 Show-MainForm
