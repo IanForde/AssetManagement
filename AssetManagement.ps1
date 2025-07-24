@@ -295,7 +295,7 @@ function Show-EditAssetForm {
             if ($assets -eq $null) { $assets = @() }
             elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
             $assets = $assets | Where-Object {
-                -not (($_.'Asset Tag' -eq $Asset.'Asset Tag') -and ($_.['Serial Number'] -eq $Asset.'Serial Number'))
+                -not (($_.'Asset Tag' -eq $Asset.'Asset Tag') -and ($_.\"Serial Number\" -eq $Asset.'Serial Number'))
             }
             Save-Assets $assets
             [System.Windows.Forms.MessageBox]::Show("Asset deleted and pushed to GitHub.","Deleted",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
@@ -371,7 +371,7 @@ function Show-ViewAllAssets {
     if (Test-Path $localCsvPath) {
         Start-Process notepad.exe $localCsvPath
     } else {
-        [System.Windows.Forms.MessageBox]::Show("Local CSV file not found.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        [System.Windows.Forms.MessageBox]::Show("Local CSV file not found.","Error",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)
     }
 }
 
@@ -422,11 +422,14 @@ function Show-MainForm {
     $form.ShowDialog() | Out-Null
 }
 
+
 # ========== START APP =============
 
 # Auto pull latest changes before starting UI
 $pullResult = Run-GitCommand "pull origin $gitBranch"
 if ($pullResult.ExitCode -ne 0) {
-    [System.Windows.Forms.MessageBox]::Show("Warning: Git pull failed:`n$($pullResult.StdErr)","Warning",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
+    [System.Windows.Forms.MessageBox]::Show(
+        "Warning: Git pull failed:`n$($pullResult.StdErr)",
+        "Warning",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
 }
 Show-MainForm
