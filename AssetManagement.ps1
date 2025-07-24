@@ -2,11 +2,8 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # =============== CONFIGURATION ===============
-# Local Git repository path (clone your repo here manually first)
-$localRepoPath = "C:\AssetManagement"   # Change if your local repo path is different
+$localRepoPath = "C:\AssetManagement"   # Change if different
 $localCsvPath = Join-Path -Path $localRepoPath -ChildPath "AssetList.csv"
-
-# Git branch to push/pull
 $gitBranch = 'main'
 # =============================================
 
@@ -29,32 +26,25 @@ function Run-GitCommand {
     $output = $process.StandardOutput.ReadToEnd()
     $errorOutput = $process.StandardError.ReadToEnd()
     $process.WaitForExit()
-
     return @{ ExitCode = $process.ExitCode; StdOut = $output; StdErr = $errorOutput }
 }
 
 function Commit-And-Push {
     try {
-        # Stage the CSV
         $addResult = Run-GitCommand "add AssetList.csv"
         if ($addResult.ExitCode -ne 0) {
             throw "Git add failed: $($addResult.StdErr)"
         }
-
-        # Commit changes - allow empty commit to avoid errors if no changes
         $commitMessage = "Update AssetList.csv by script - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         $commitResult = Run-GitCommand "commit -m `"$commitMessage`" --allow-empty"
         if ($commitResult.ExitCode -ne 0 -and ($commitResult.StdErr -notmatch "nothing to commit")) {
             throw "Git commit failed: $($commitResult.StdErr)"
         }
-
-        # Push to remote
         $pushResult = Run-GitCommand "push origin $gitBranch"
         if ($pushResult.ExitCode -ne 0) {
             throw "Git push failed: $($pushResult.StdErr)"
         }
-
-        [System.Windows.Forms.MessageBox]::Show("Changes pushed successfully to GitHub.","Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        [System.Windows.Forms.MessageBox]::Show("Pushed changes to GitHub successfully.","Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show("Git operation failed:`n$_","Git Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -72,7 +62,6 @@ function New-LabeledTextBox($labelText, $top, $width=250) {
     $textBox.Top = $top - 3
     $textBox.Left = 110
     $textBox.Width = $width
-
     return ,@($label, $textBox)
 }
 
@@ -90,7 +79,7 @@ function Save-Assets($assets) {
         $assets | Export-Csv -Path $localCsvPath -NoTypeInformation -Encoding UTF8
         Commit-And-Push
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Error saving asset data: $_","Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        [System.Windows.Forms.MessageBox]::Show("Error saving asset data: $_","Error",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)
     }
 }
 
@@ -136,11 +125,9 @@ function Show-LookupAssetForm {
             return
         }
         $assets = Load-Assets
-        $match = $assets | Where-Object { `
-            $_.'Asset Tag' -like "*$query*" -or $_.'Serial Number' -like "*$query*" }
-
+        $match = $assets | Where-Object { $_.'Asset Tag' -like "*$query*" -or $_.'Serial Number' -like "*$query*" }
         if ($match.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("No matching asset found.","Not Found", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            [System.Windows.Forms.MessageBox]::Show("No matching asset found.","Not Found",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
         } elseif ($match.Count -eq 1 -or ($match.Count -eq $null -and $match)) {
             $form.Close()
             Show-EditAssetForm -Asset ($match | Select-Object -First 1)
@@ -206,7 +193,7 @@ function Show-SelectAssetForm {
 
     $btnSelect.Add_Click({
         if ($listView.SelectedItems.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("Please select an asset from the list.","Selection Required", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+            [System.Windows.Forms.MessageBox]::Show("Please select an asset from the list.","Selection Required",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $idx = $listView.SelectedItems[0].Index
@@ -225,7 +212,7 @@ function Show-EditAssetForm {
     )
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Edit Asset"
-    $form.Size = New-Object System.Drawing.Size(400,350)
+    $form.Size = New-Object System.Drawing.Size(450,350)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
@@ -242,27 +229,34 @@ function Show-EditAssetForm {
     $btnSave = New-Object System.Windows.Forms.Button
     $btnSave.Text = "Save"
     $btnSave.Top = 240
-    $btnSave.Left = 80
+    $btnSave.Left = 70
     $btnSave.Width = 100
     $form.Controls.Add($btnSave)
 
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = "Cancel"
     $btnCancel.Top = 240
-    $btnCancel.Left = 200
+    $btnCancel.Left = 190
     $btnCancel.Width = 100
     $form.Controls.Add($btnCancel)
 
+    $btnDelete = New-Object System.Windows.Forms.Button
+    $btnDelete.Text = "Delete"
+    $btnDelete.Top = 240
+    $btnDelete.Left = 310
+    $btnDelete.Width = 100
+    $btnDelete.ForeColor = "Red"
+    $form.Controls.Add($btnDelete)
+
+    # Save Editing
     $btnSave.Add_Click({
         if ([string]::IsNullOrEmpty($controls['Asset Tag'].Text.Trim())) {
-            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $assets = Load-Assets
-
         if ($assets -eq $null) { $assets = @() }
         elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
-
         $updated = $false
         for ($i=0; $i -lt $assets.Count; $i++) {
             if ($assets[$i].'Asset Tag' -eq $Asset.'Asset Tag' -and $assets[$i].'Serial Number' -eq $Asset.'Serial Number') {
@@ -288,6 +282,26 @@ function Show-EditAssetForm {
     })
 
     $btnCancel.Add_Click({ $form.Close() })
+
+    # Delete button event
+    $btnDelete.Add_Click({
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            "Are you sure you want to delete this asset? This action cannot be undone.",
+            "Confirm Delete",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning)
+        if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
+            $assets = Load-Assets
+            if ($assets -eq $null) { $assets = @() }
+            elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
+            $assets = $assets | Where-Object {
+                -not (($_.'Asset Tag' -eq $Asset.'Asset Tag') -and ($_.['Serial Number'] -eq $Asset.'Serial Number'))
+            }
+            Save-Assets $assets
+            [System.Windows.Forms.MessageBox]::Show("Asset deleted and pushed to GitHub.","Deleted",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
+            $form.Close()
+        }
+    })
     $form.ShowDialog() | Out-Null
 }
 
@@ -323,14 +337,12 @@ function Show-CreateAssetForm {
 
     $btnAdd.Add_Click({
         if ([string]::IsNullOrEmpty($controls['Asset Tag'].Text.Trim())) {
-            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $assets = Load-Assets
-
         if ($assets -eq $null) { $assets = @() }
         elseif (-not ($assets -is [System.Collections.IEnumerable])) { $assets = @($assets) }
-
         $existing = $assets | Where-Object {
             $_.'Asset Tag' -eq $controls['Asset Tag'].Text.Trim() -or
             $_.'Serial Number' -eq $controls['Serial Number'].Text.Trim()
@@ -366,7 +378,7 @@ function Show-ViewAllAssets {
 function Show-MainForm {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Asset Management System"
-    $form.Size = New-Object System.Drawing.Size(320,270)
+    $form.Size = New-Object System.Drawing.Size(330,270)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
@@ -410,7 +422,6 @@ function Show-MainForm {
     $form.ShowDialog() | Out-Null
 }
 
-
 # ========== START APP =============
 
 # Auto pull latest changes before starting UI
@@ -418,5 +429,4 @@ $pullResult = Run-GitCommand "pull origin $gitBranch"
 if ($pullResult.ExitCode -ne 0) {
     [System.Windows.Forms.MessageBox]::Show("Warning: Git pull failed:`n$($pullResult.StdErr)","Warning",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
 }
-
 Show-MainForm
