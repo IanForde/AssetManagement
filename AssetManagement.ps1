@@ -384,7 +384,7 @@ function Show-MainForm {
     $form.MaximizeBox = $false
 
     $notice = New-Object System.Windows.Forms.Label
-    $notice.Text = "Using local Git repo - changes auto-pushed to GitHub."
+    $notice.Text = ""
     $notice.AutoSize = $true
     $notice.ForeColor = "DarkGreen"
     $notice.Top = 8
