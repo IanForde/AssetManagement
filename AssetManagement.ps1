@@ -101,19 +101,23 @@ function Show-LookupAssetForm {
     $btnSearch.Add_Click({
         $query = $inputBox.Text.Trim()
         if ([string]::IsNullOrEmpty($query)) {
-            [System.Windows.Forms.MessageBox]::Show("Please enter an Asset Tag or Serial Number.","Input Required")
+            [System.Windows.Forms.MessageBox]::Show("Please enter an Asset Tag or Serial Number.","Input Required", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $assets = Load-Assets
         $match = $assets | Where-Object {
             $_.'Asset Tag' -like "*$query*" -or $_.'Serial Number' -like "*$query*"
         }
+
         if ($match.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("No matching asset found.","Not Found")
-        } elseif ($match.Count -eq 1) {
+            [System.Windows.Forms.MessageBox]::Show("No matching asset found.","Not Found", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        } elseif ($match.Count -eq 1 -or ($match.Count -eq $null -and $match)) {
             $form.Close()
-            Show-EditAssetForm -Asset $match[0]
+            # When single object, ensure treated as single asset object
+            Show-EditAssetForm -Asset ($match | Select-Object -First 1)
         } else {
+            # Ensure $match is always an array for Show-SelectAssetForm
+            if ($match.Count -eq $null -and $match) { $match = @($match) }
             $form.Close()
             Show-SelectAssetForm -Matches $match
         }
@@ -174,7 +178,7 @@ function Show-SelectAssetForm {
 
     $btnSelect.Add_Click({
         if ($listView.SelectedItems.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("Please select an asset from the list.","Selection Required")
+            [System.Windows.Forms.MessageBox]::Show("Please select an asset from the list.","Selection Required", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $idx = $listView.SelectedItems[0].Index
@@ -223,7 +227,7 @@ function Show-EditAssetForm {
 
     $btnSave.Add_Click({
         if ([string]::IsNullOrEmpty($controls['Asset Tag'].Text.Trim())) {
-            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error")
+            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $assets = Load-Assets
@@ -287,7 +291,7 @@ function Show-CreateAssetForm {
 
     $btnAdd.Add_Click({
         if ([string]::IsNullOrEmpty($controls['Asset Tag'].Text.Trim())) {
-            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error")
+            [System.Windows.Forms.MessageBox]::Show("Asset Tag cannot be empty.","Validation Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
         $assets = Load-Assets
@@ -296,7 +300,7 @@ function Show-CreateAssetForm {
             $_.'Serial Number' -eq $controls['Serial Number'].Text.Trim()
         }
         if ($existing.Count -gt 0) {
-            $confirm = [System.Windows.Forms.MessageBox]::Show("Asset Tag or Serial Number already exists. Add anyway?","Duplicate Warning",[System.Windows.Forms.MessageBoxButtons]::YesNo)
+            $confirm = [System.Windows.Forms.MessageBox]::Show("Asset Tag or Serial Number already exists. Add anyway?","Duplicate Warning",[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning)
             if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
         }
         $newObj = New-Object PSObject -Property @{
@@ -316,7 +320,12 @@ function Show-CreateAssetForm {
 }
 
 function Show-ViewAllAssets {
-    Start-Process notepad.exe $localCsvPath
+    # Open local CSV in Notepad for manual viewing/editing
+    if (Test-Path $localCsvPath) {
+        Start-Process notepad.exe $localCsvPath
+    } else {
+        [System.Windows.Forms.MessageBox]::Show("Local CSV file not found.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    }
 }
 
 function Show-MainForm {
