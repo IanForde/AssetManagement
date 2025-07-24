@@ -26,13 +26,18 @@ function Sync-FromGitHub {
     }
 }
 
-# Read assets from the local cached CSV
+# Read assets from the local cached CSV and force as array
 function Load-Assets {
     if (-Not (Test-Path $localCsvPath)) {
         # Create headers if file doesn't exist
         "Asset Tag,Model,Serial Number,Assigned To,Description" | Out-File -FilePath $localCsvPath -Encoding UTF8
     }
-    Import-Csv -Path $localCsvPath
+    $assets = Import-Csv -Path $localCsvPath
+    if ($null -eq $assets) {
+        return @()
+    }
+    # Force $assets to be always an array
+    return @($assets)
 }
 
 # Save assets to the local cached CSV
@@ -231,6 +236,14 @@ function Show-EditAssetForm {
             return
         }
         $assets = Load-Assets
+
+        # Ensure $assets is always an array before modifying
+        if ($assets -eq $null) {
+            $assets = @()
+        } elseif (-not ($assets -is [System.Collections.IEnumerable])) {
+            $assets = @($assets)
+        }
+
         $updated = $false
         for ($i=0; $i -lt $assets.Count; $i++) {
             if ($assets[$i].'Asset Tag' -eq $Asset.'Asset Tag' -and $assets[$i].'Serial Number' -eq $Asset.'Serial Number') {
@@ -243,11 +256,11 @@ function Show-EditAssetForm {
         }
         if (-not $updated) {
             $newObj = New-Object PSObject -Property @{
-                'Asset Tag' = $controls['Asset Tag'].Text.Trim()
-                'Model' = $controls['Model'].Text.Trim()
-                'Serial Number' = $controls['Serial Number'].Text.Trim()
-                'Assigned To' = $controls['Assigned To'].Text.Trim()
-                'Description' = $controls['Description'].Text.Trim()
+                'Asset Tag'    = $controls['Asset Tag'].Text.Trim()
+                'Model'        = $controls['Model'].Text.Trim()
+                'Serial Number'= $controls['Serial Number'].Text.Trim()
+                'Assigned To'  = $controls['Assigned To'].Text.Trim()
+                'Description'  = $controls['Description'].Text.Trim()
             }
             $assets += $newObj
         }
@@ -295,6 +308,14 @@ function Show-CreateAssetForm {
             return
         }
         $assets = Load-Assets
+
+        # Ensure $assets is always an array before modifying
+        if ($assets -eq $null) {
+            $assets = @()
+        } elseif (-not ($assets -is [System.Collections.IEnumerable])) {
+            $assets = @($assets)
+        }
+
         $existing = $assets | Where-Object {
             $_.'Asset Tag' -eq $controls['Asset Tag'].Text.Trim() -or
             $_.'Serial Number' -eq $controls['Serial Number'].Text.Trim()
@@ -304,11 +325,11 @@ function Show-CreateAssetForm {
             if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
         }
         $newObj = New-Object PSObject -Property @{
-            'Asset Tag' = $controls['Asset Tag'].Text.Trim()
-            'Model' = $controls['Model'].Text.Trim()
-            'Serial Number' = $controls['Serial Number'].Text.Trim()
-            'Assigned To' = $controls['Assigned To'].Text.Trim()
-            'Description' = $controls['Description'].Text.Trim()
+            'Asset Tag'    = $controls['Asset Tag'].Text.Trim()
+            'Model'        = $controls['Model'].Text.Trim()
+            'Serial Number'= $controls['Serial Number'].Text.Trim()
+            'Assigned To'  = $controls['Assigned To'].Text.Trim()
+            'Description'  = $controls['Description'].Text.Trim()
         }
         $assets += $newObj
         Save-Assets $assets
