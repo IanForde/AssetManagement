@@ -3,10 +3,10 @@ Add-Type -AssemblyName System.Drawing
 
 # =============== CONFIGURATION ===============
 # Local Git repository path (clone your repo here manually first)
-$localRepoPath = "C:\AssetManagement"
+$localRepoPath = "C:\AssetManagement"   # Change if your local repo path is different
 $localCsvPath = Join-Path -Path $localRepoPath -ChildPath "AssetList.csv"
 
-# Git branch to push to
+# Git branch to push/pull
 $gitBranch = 'main'
 # =============================================
 
@@ -410,5 +410,13 @@ function Show-MainForm {
     $form.ShowDialog() | Out-Null
 }
 
+
 # ========== START APP =============
+
+# Auto pull latest changes before starting UI
+$pullResult = Run-GitCommand "pull origin $gitBranch"
+if ($pullResult.ExitCode -ne 0) {
+    [System.Windows.Forms.MessageBox]::Show("Warning: Git pull failed:`n$($pullResult.StdErr)","Warning",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
+}
+
 Show-MainForm
